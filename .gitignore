@@ -1,0 +1,27 @@
+# 1. Python virtual environments
+.venv/
+venv/
+env/
+
+# 2. Environment variables & API keys (NEVER commit these!)
+.env
+.env.*
+
+# 3. Python bytecode & cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 4. Local FAISS index & Hugging Face model caches (if saved locally)
+*.index
+*.faiss
+.cache/
+
+# 5. Gradio temporary flagged data
+.gradio/
+flagged/
+
+# 6. VS Code & OS-specific clutter
+.vscode/
+.DS_Store
+Thumbs.db
