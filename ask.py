@@ -25,10 +25,12 @@ index = faiss.read_index("hr.faiss")
 with open("hr_chunks.json", encoding="utf-8") as f:
     chunks = json.load(f)
 
-MODELS = ["gemini-2.5-flash", "gemini-flash-latest"]
+MODELS = ["gemini-3.8-flash", "gemini-flash-latest"]
+RETRYABLE_STATUS_CODES = {408, 429, 500, 502, 503, 504}
 
 
 def generate_with_retry(contents, config):
+    failures = {}
     for attempt in range(4):
         for model in MODELS:
             try:
@@ -37,10 +39,25 @@ def generate_with_retry(contents, config):
                     contents=contents,
                     config=config,
                 )
-            except Exception:
-                print(f"({model} busy or unavailable, trying again...)")
+            except Exception as exc:
+                failures[model] = exc
+                print(
+                    f"{model} failed ({type(exc).__name__}: {exc}); "
+                    "trying the next model..."
+                )
+                status_code = getattr(exc, "code", None)
+                if status_code is not None and status_code not in RETRYABLE_STATUS_CODES:
+                    raise RuntimeError(
+                        f"Gemini request failed for {model}: {exc}"
+                    ) from exc
         time.sleep(2 ** attempt)
-    raise RuntimeError("Gemini is still unavailable. Try again in a few minutes.")
+    details = "; ".join(
+        f"{model}: {type(error).__name__}: {error}"
+        for model, error in failures.items()
+    )
+    raise RuntimeError(
+        f"Gemini generation failed after retries. Errors: {details}"
+    ) from next(reversed(failures.values()))
 
 
 not_found_rule = """If the excerpts do not clearly answer the question, do NOT guess and do NOT invent a rule.
