@@ -1,27 +1,47 @@
-import os, json
-import numpy as np
+import json
+import os
+import time
+
 import faiss
+import numpy as np
+from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
-client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
-index = faiss.read_index("hr.faiss")
-chunks = json.load(open("hr_chunks.json", encoding="utf-8"))
-import time
+load_dotenv()
 
-MODELS = ["gemini-2.5-flash", "gemini-flash-latest"]  # main model first, backup second
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+if not GEMINI_API_KEY:
+    raise RuntimeError(
+        "GEMINI_API_KEY is not set. Add it to your environment or a .env file before running this app."
+    )
+
+client = genai.Client(api_key=GEMINI_API_KEY)
+
+if not os.path.exists("hr.faiss"):
+    raise FileNotFoundError("hr.faiss was not found. Generate the index first with build_index_gemini.py.")
+
+index = faiss.read_index("hr.faiss")
+with open("hr_chunks.json", encoding="utf-8") as f:
+    chunks = json.load(f)
+
+MODELS = ["gemini-2.5-flash", "gemini-flash-latest"]
+
 
 def generate_with_retry(contents, config):
     for attempt in range(4):
         for model in MODELS:
             try:
                 return client.models.generate_content(
-                    model=model, contents=contents, config=config
+                    model=model,
+                    contents=contents,
+                    config=config,
                 )
-            except Exception as e:
+            except Exception:
                 print(f"({model} busy or unavailable, trying again...)")
-        time.sleep(2 ** attempt)   # wait 1, 2, 4, 8 seconds between rounds
+        time.sleep(2 ** attempt)
     raise RuntimeError("Gemini is still unavailable. Try again in a few minutes.")
+
 
 not_found_rule = """If the excerpts do not clearly answer the question, do NOT guess and do NOT invent a rule.
 Say: "The policy doesn't cover this directly." Then, if any excerpt is related, briefly mention what it does say and cite the section.
@@ -33,27 +53,30 @@ Mention the section number you used, like (Section 2.1).
 {not_found_rule}
 Keep answers short and clear."""
 
-while True:
-    question = input("\nAsk a question (or type q to quit): ")
-    if question.lower() == "q":
-        break
 
-    # 1. Find the closest chunks
-    q = client.models.embed_content(
-        model="gemini-embedding-001",
-        contents=[question],
-        config=types.EmbedContentConfig(task_type="RETRIEVAL_QUERY"),
-    )
-    q_vec = np.array([q.embeddings[0].values], dtype="float32")
-    faiss.normalize_L2(q_vec)
-    scores, ids = index.search(q_vec, 5)
+def main():
+    while True:
+        question = input("\nAsk a question (or type q to quit): ")
+        if question.lower() == "q":
+            break
 
-    context = "\n\n---\n\n".join(chunks[i] for i in ids[0])
+        q = client.models.embed_content(
+            model="gemini-embedding-001",
+            contents=[question],
+            config=types.EmbedContentConfig(task_type="RETRIEVAL_QUERY"),
+        )
+        q_vec = np.array([q.embeddings[0].values], dtype="float32")
+        faiss.normalize_L2(q_vec)
+        scores, ids = index.search(q_vec, 5)
 
-    # 2. Ask Gemini to answer from those chunks
-    response = generate_with_retry(
-        contents=f"Policy excerpts:\n{context}\n\nQuestion: {question}",
-        config=types.GenerateContentConfig(system_instruction=RULES, temperature=0.2),
-    )
-    print("\n" + response.text)
-    
+        context = "\n\n---\n\n".join(chunks[i] for i in ids[0])
+
+        response = generate_with_retry(
+            contents=f"Policy excerpts:\n{context}\n\nQuestion: {question}",
+            config=types.GenerateContentConfig(system_instruction=RULES, temperature=0.2),
+        )
+        print("\n" + response.text)
+
+
+if __name__ == "__main__":
+    main()

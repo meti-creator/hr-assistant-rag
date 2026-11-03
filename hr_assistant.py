@@ -1,12 +1,4 @@
-"""
-Project 1: HR Assistant — Branch 1 (`step-1-policy-chunking`)
-=============================================================
-Goal for Step 1:
-1. Create or load the company HR handbook (`hr_policy.txt`).
-2. Split the handbook into small, overlapping word chunks so our
-   search engine (in Step 2) can find exact policy rules without
-   cutting sentences or losing context at the edges.
-"""
+
 
 from pathlib import Path
 from typing import List
@@ -51,10 +43,7 @@ def split_into_chunks(
     """
     Splits the HR policy text into smaller pieces (chunks).
     
-    Why overlap matters:
-    If a rule sits right at the boundary of Chunk 2, repeating the last
-    `overlap_words` (e.g., 10 words) at the start of Chunk 3 keeps the full
-    thought intact.
+   
     """
     # 1. Split by double newline so each policy section starts cleanly
     sections = [s.strip() for s in text.split("\n\n") if s.strip()]
