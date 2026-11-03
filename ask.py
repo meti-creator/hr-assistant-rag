@@ -7,6 +7,21 @@ from google.genai import types
 client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 index = faiss.read_index("hr.faiss")
 chunks = json.load(open("hr_chunks.json", encoding="utf-8"))
+import time
+
+MODELS = ["gemini-2.5-flash", "gemini-flash-latest"]  # main model first, backup second
+
+def generate_with_retry(contents, config):
+    for attempt in range(4):
+        for model in MODELS:
+            try:
+                return client.models.generate_content(
+                    model=model, contents=contents, config=config
+                )
+            except Exception as e:
+                print(f"({model} busy or unavailable, trying again...)")
+        time.sleep(2 ** attempt)   # wait 1, 2, 4, 8 seconds between rounds
+    raise RuntimeError("Gemini is still unavailable. Try again in a few minutes.")
 
 not_found_rule = """If the excerpts do not clearly answer the question, do NOT guess and do NOT invent a rule.
 Say: "The policy doesn't cover this directly." Then, if any excerpt is related, briefly mention what it does say and cite the section.
@@ -36,8 +51,7 @@ while True:
     context = "\n\n---\n\n".join(chunks[i] for i in ids[0])
 
     # 2. Ask Gemini to answer from those chunks
-    response = client.models.generate_content(
-        model="gemini-3.8-flash",
+    response = generate_with_retry(
         contents=f"Policy excerpts:\n{context}\n\nQuestion: {question}",
         config=types.GenerateContentConfig(system_instruction=RULES, temperature=0.2),
     )
