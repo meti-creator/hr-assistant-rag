@@ -1,10 +1,9 @@
+cat << 'EOF' > requirements.txt
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
 sentence-transformers>=3.0.0
-
 faiss-cpu>=1.8.0
-
 openai>=1.40.0
-
 gradio>=4.40.0
-
 python-dotenv>=1.0.0
-
+EOF
